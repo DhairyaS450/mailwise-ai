@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <!-- Daily Summary Section -->
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">Daily Summary</h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">{{ summary }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Categories -->
+    <div class="col-md-8">
+        <div class="mb-4">
+            <h4>Your Emails</h4>
+            <div class="btn-group mb-3">
+                <button class="btn btn-outline-primary active" data-filter="all">All</button>
+                <button class="btn btn-outline-danger" data-filter="Urgent">Urgent</button>
+                <button class="btn btn-outline-warning" data-filter="Important">Important</button>
+                <button class="btn btn-outline-success" data-filter="Low Priority">Low Priority</button>
+            </div>
+        </div>
+
+        <!-- Email List -->
+        <div id="email-list">
+            {% for email in emails %}
+            <div class="card email-card {{ email.category|lower|replace(' ', '-') }}" data-category="{{ email.category }}">
+                <div class="card-body">
+                    <h5 class="card-title">{{ email.subject }}</h5>
+                    <h6 class="card-subtitle mb-2 text-muted">From: {{ email.from }}</h6>
+                    <p class="card-text">{{ email.content[:200] }}...</p>
+                    <span class="badge {% if email.category == 'Urgent' %}bg-danger{% elif email.category == 'Important' %}bg-warning{% else %}bg-success{% endif %}">
+                        {{ email.category }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Custom Rules Section -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Custom Rules</h5>
+            </div>
+            <div class="card-body">
+                <form id="rule-form">
+                    <div class="mb-3">
+                        <label for="ruleName" class="form-label">Rule Name</label>
+                        <input type="text" class="form-control" id="ruleName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ruleCondition" class="form-label">Condition</label>
+                        <textarea class="form-control" id="ruleCondition" rows="3" required></textarea>
+                        <small class="text-muted">Example: Mark as urgent if email is from boss@company.com</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Add Rule</button>
+                </form>
+
+                <div class="mt-4">
+                    <h6>Active Rules</h6>
+                    <ul class="list-group" id="rules-list">
+                        {% for rule in session.get('custom_rules', []) %}
+                        <li class="list-group-item">
+                            <strong>{{ rule.name }}</strong>
+                            <p class="mb-0 text-muted">{{ rule.condition }}</p>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // Filter emails
+    $('.btn-group button').click(function() {
+        $('.btn-group button').removeClass('active');
+        $(this).addClass('active');
+        
+        const filter = $(this).data('filter');
+        if (filter === 'all') {
+            $('.email-card').show();
+        } else {
+            $('.email-card').hide();
+            $(`.email-card[data-category="${filter}"]`).show();
+        }
+    });
+
+    // Handle custom rule submission
+    $('#rule-form').submit(function(e) {
+        e.preventDefault();
+        
+        const ruleData = {
+            name: $('#ruleName').val(),
+            condition: $('#ruleCondition').val()
+        };
+
+        $.ajax({
+            url: '{{ url_for("email.add_custom_rule") }}',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(ruleData),
+            success: function(response) {
+                // Add new rule to the list
+                $('#rules-list').append(`
+                    <li class="list-group-item">
+                        <strong>${ruleData.name}</strong>
+                        <p class="mb-0 text-muted">${ruleData.condition}</p>
+                    </li>
+                `);
+                
+                // Clear form
+                $('#ruleName').val('');
+                $('#ruleCondition').val('');
+            },
+            error: function(xhr) {
+                alert('Error adding rule: ' + xhr.responseJSON.error);
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
