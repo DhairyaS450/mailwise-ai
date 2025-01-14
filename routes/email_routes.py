@@ -5,6 +5,7 @@ import os
 import json
 from services.email_service import EmailService
 from services.openai_service import generate_daily_summary
+from services.auth_service import get_credentials
 
 email_blueprint = Blueprint('email', __name__)
 
@@ -14,11 +15,8 @@ CLIENT_SECRETS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "
 
 @email_blueprint.route('/')
 def home():
-    if 'credentials' not in session:
-        return redirect(url_for('email.login'))
-    
     try:
-        credentials = Credentials(**session['credentials'])
+        credentials = get_credentials()
         email_service = EmailService(credentials)
         
         # Fetch and categorize emails
@@ -31,8 +29,7 @@ def home():
                              emails=emails, 
                              summary=summary)
     except Exception as e:
-        print(f"Error in home route: {str(e)}")
-        session.clear()
+        print(f"Error: {str(e)}")
         return redirect(url_for('email.login'))
 
 @email_blueprint.route('/login')

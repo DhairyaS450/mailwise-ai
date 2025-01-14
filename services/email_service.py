@@ -24,7 +24,7 @@ class EmailService:
             ).execute()
             
             messages = results.get('messages', [])
-            emails = []
+            emails_data = []
             
             for message in messages:
                 try:
@@ -46,23 +46,38 @@ class EmailService:
                     # Clean the body text
                     body = self._clean_text(body)
                     
-                    # Analyze content using OpenAI
-                    category = analyze_email_content(f"Subject: {subject}\n\nContent: {body[:500]}")
-                    
-                    emails.append({
-                        'id': message['id'],
+                    # Store email data
+                    emails_data.append({
                         'subject': subject,
                         'from': from_email,
                         'date': date,
-                        'content': body[:1000] + ('...' if len(body) > 1000 else ''),
-                        'category': category
+                        'body': body[:500],  # Limit body length for analysis
+                        'full_body': body,
+                        'id': message['id']
                     })
                     
                 except Exception as e:
-                    print(f"Error processing individual email: {str(e)}")
+                    print(f"Error processing message {message['id']}: {str(e)}")
                     continue
             
-            return emails
+            # Batch analyze all emails at once
+            if emails_data:
+                categories = analyze_email_content(emails_data)
+                
+                # Combine the results
+                emails = []
+                for email_data, category in zip(emails_data, categories):
+                    emails.append({
+                        'subject': email_data['subject'],
+                        'from': email_data['from'],
+                        'date': email_data['date'],
+                        'body': email_data['full_body'],
+                        'category': category,
+                        'id': email_data['id']
+                    })
+                
+                return emails
+            return []
             
         except Exception as e:
             print(f"Error fetching emails: {str(e)}")
