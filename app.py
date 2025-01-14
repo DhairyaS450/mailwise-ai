@@ -1,14 +1,15 @@
 import os
-from flask import Flask
 from dotenv import load_dotenv
-from flask_session import Session
-from routes.email_routes import email_blueprint
+
+# Load environment variables first
+load_dotenv()
 
 # Allow OAuth2 insecure transport for development
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
-# Load environment variables
-load_dotenv()
+from flask import Flask
+from flask_session import Session
+from routes.email_routes import email_blueprint
 
 app = Flask(__name__)
 

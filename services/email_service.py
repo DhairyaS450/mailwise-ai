@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from services.openai_service import analyze_email_content
 import base64
 import email
+import html
 
 class EmailService:
     def __init__(self, credentials):
@@ -18,54 +19,81 @@ class EmailService:
             # Get messages from Gmail
             results = self.service.users().messages().list(
                 userId='me',
-                q=f'after:{time_threshold}'
+                q=f'after:{time_threshold}',
+                maxResults=20  # Limit to 20 emails for better performance
             ).execute()
             
             messages = results.get('messages', [])
             emails = []
             
             for message in messages:
-                msg = self.service.users().messages().get(
-                    userId='me',
-                    id=message['id'],
-                    format='full'
-                ).execute()
-                
-                # Process email content
-                headers = msg['payload']['headers']
-                subject = next(h['value'] for h in headers if h['name'].lower() == 'subject')
-                from_email = next(h['value'] for h in headers if h['name'].lower() == 'from')
-                date = next(h['value'] for h in headers if h['name'].lower() == 'date')
-                
-                # Get email body
-                if 'parts' in msg['payload']:
-                    parts = msg['payload']['parts']
-                    data = parts[0]['body'].get('data', '')
-                else:
-                    data = msg['payload']['body'].get('data', '')
-                
-                if data:
-                    text = base64.urlsafe_b64decode(data).decode()
-                else:
-                    text = "No content"
-                
-                # Analyze content using OpenAI
-                category = analyze_email_content(subject + " " + text)
-                
-                emails.append({
-                    'id': message['id'],
-                    'subject': subject,
-                    'from': from_email,
-                    'date': date,
-                    'content': text,
-                    'category': category
-                })
+                try:
+                    msg = self.service.users().messages().get(
+                        userId='me',
+                        id=message['id'],
+                        format='full'
+                    ).execute()
+                    
+                    # Process email content
+                    headers = msg['payload']['headers']
+                    subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'No Subject')
+                    from_email = next((h['value'] for h in headers if h['name'].lower() == 'from'), 'Unknown Sender')
+                    date = next((h['value'] for h in headers if h['name'].lower() == 'date'), '')
+                    
+                    # Get email body
+                    body = self._get_email_body(msg['payload'])
+                    
+                    # Clean the body text
+                    body = self._clean_text(body)
+                    
+                    # Analyze content using OpenAI
+                    category = analyze_email_content(f"Subject: {subject}\n\nContent: {body[:500]}")
+                    
+                    emails.append({
+                        'id': message['id'],
+                        'subject': subject,
+                        'from': from_email,
+                        'date': date,
+                        'content': body[:1000] + ('...' if len(body) > 1000 else ''),
+                        'category': category
+                    })
+                    
+                except Exception as e:
+                    print(f"Error processing individual email: {str(e)}")
+                    continue
             
             return emails
             
         except Exception as e:
             print(f"Error fetching emails: {str(e)}")
             return []
+
+    def _get_email_body(self, payload):
+        """Extract email body from the payload"""
+        if 'parts' in payload:
+            for part in payload['parts']:
+                if part['mimeType'] == 'text/plain':
+                    if 'data' in part['body']:
+                        return base64.urlsafe_b64decode(part['body']['data']).decode()
+                elif 'parts' in part:
+                    return self._get_email_body(part)
+        elif 'body' in payload and 'data' in payload['body']:
+            return base64.urlsafe_b64decode(payload['body']['data']).decode()
+        return ""
+
+    def _clean_text(self, text):
+        """Clean and format email text"""
+        # Decode HTML entities
+        text = html.unescape(text)
+        
+        # Remove extra whitespace
+        text = ' '.join(text.split())
+        
+        # Remove very long strings (likely garbage)
+        if len(text) > 10000:
+            text = text[:10000] + "..."
+            
+        return text
 
     def apply_label(self, message_id, label_name):
         """Apply a label to an email"""
