@@ -6,6 +6,7 @@ import json
 from services.email_service import EmailService
 from services.openai_service import generate_daily_summary
 from services.auth_service import get_credentials
+import requests
 
 email_blueprint = Blueprint('email', __name__)
 
@@ -87,9 +88,11 @@ def oauth2callback():
 
 @email_blueprint.route('/logout')
 def logout():
-    if 'credentials' in session:
-        del session['credentials']
-    return redirect(url_for('email.login'))
+    # Clear all session data
+    session.clear()
+    
+    # Redirect to Google's account chooser
+    return redirect('https://accounts.google.com/AccountChooser?continue=http://localhost:5000/')
 
 @email_blueprint.route('/api/custom-rule', methods=['POST'])
 def add_custom_rule():
